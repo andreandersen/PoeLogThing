@@ -26,32 +26,27 @@ namespace PoeLogThing
 
             offset++;
 
-            switch (prefix)
+            result = prefix switch
             {
-                case '#':
-                case '%':
-                case '$':
-                case '&':
-                    var msgData = GetMessageData(utf8Line.Slice(offset));
-                    result = new PublicChatMessage(
-                        msgData.Name,
-                        msgData.GuildTag,
-                        msgData.Message,
-                        prefix, timestamp);
-                    break;
-                case '@':
-                    result = ParseWhisper(utf8Line.Slice(offset), timestamp);
-                    break;
-                case ':':
-                    result = ParseColonPrefixed(utf8Line.Slice(offset + 1), timestamp);
-                    break;
-                default:
-                    offset--;
-                    result = ParseStatus(utf8Line.Slice(offset), timestamp);
-                    break;
-            }
+                var x when x == '#' || x == '%' || x == '$' || x == '&' 
+                    => ParseGlobalMessage(utf8Line, offset, prefix, timestamp),
+                '@' => ParseWhisper(utf8Line.Slice(offset), timestamp),
+                ':' => ParseColonPrefixed(utf8Line.Slice(offset + 1), timestamp),
+                _ => ParseStatus(utf8Line.Slice(--offset), timestamp)
+            };
 
             return result != null;
+        }
+
+        private static PublicChatMessage ParseGlobalMessage(ReadOnlySpan<char> utf8Line, int offset, char prefix,
+            DateTime timestamp)
+        {
+            var msgData = GetMessageData(utf8Line.Slice(offset));
+            return new PublicChatMessage(
+                msgData.Name,
+                msgData.GuildTag,
+                msgData.Message,
+                prefix, timestamp);
         }
 
         private static ILogEntry ParseWhisper(in ReadOnlySpan<char> data, DateTime timestamp)
