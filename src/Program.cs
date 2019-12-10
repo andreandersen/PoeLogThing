@@ -15,6 +15,11 @@ namespace PoeLogThing
                     @"C:\Program Files (x86)\Grinding Gear Games\Path of Exile\logs\Client.txt");
 
 
+            await foreach (var line in watchTask)
+            {
+                Console.WriteLine(line);
+            }
+
             Console.ReadKey(true);
             
             // Can also just await it...

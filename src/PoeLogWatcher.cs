@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,7 +11,9 @@ namespace PoeLogThing
     public class LogWatcher
     {
 
-        public async Task WatchAsync(string fileName, CancellationToken ct = default)
+        public async IAsyncEnumerable<string> WatchAsync(
+            string fileName,
+            [EnumeratorCancellation] CancellationToken ct = default)
         {
             await using var fs = new FileStream(
                 fileName, FileMode.Open,
@@ -24,22 +26,28 @@ namespace PoeLogThing
             {
                 if (fs.Length != pos)
                 {
-                    int toRead = (int)(fs.Length - pos);
+                    var toRead = (int)(fs.Length - pos);
                     Memory<byte> buffer = new byte[toRead];
 
                     await fs.ReadAsync(buffer, ct);
-                    ProcessBuffer(in buffer);
+                    foreach (var l in ProcessBuffer(buffer))
+                    {
+                        yield return l;
+                    }
+
                     pos = fs.Position;
                 }
-                await Task.Delay(25);
+
+                await Task.Delay(25, ct);
             }
         }
 
-        private void ProcessBuffer(in Memory<byte> buffer)
+        private List<string> ProcessBuffer(Memory<byte> buffer)
         {
             var span = buffer.Span;
             ReadOnlySpan<char> text = Encoding.UTF8.GetString(span);
 
+            var list = new List<string>();
             while (!text.IsEmpty)
             {
                 var lineBreak = text.IndexOf("\r\n");
@@ -47,16 +55,12 @@ namespace PoeLogThing
 
                 var line = text.Slice(0, lineBreak);
 
-                // Emit your event here instead of Console
-                Console.WriteLine(line.ToString());
-
-                //if (!EntryParser.TryParse(in line, out var logMessage))
-                //{
-                //    //Debug.WriteLine("Failed to parse");
-                //}
+                list.Add(line.ToString());
 
                 text = text.Slice(lineBreak + 2);
             }
+
+            return list;
         }
     }
 }
