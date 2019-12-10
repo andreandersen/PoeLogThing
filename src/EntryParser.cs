@@ -72,7 +72,6 @@ namespace PoeLogThing
         private static IntermediaryMessageData GetMessageData(ReadOnlySpan<char> data)
         {
             ReadOnlySpan<char> tag = default;
-            ReadOnlySpan<char> name = default;
 
             if (data[0] == '<')
             {
@@ -82,7 +81,7 @@ namespace PoeLogThing
             }
 
             var nextSpaceIndex = data.IndexOf(':');
-            name = data[..nextSpaceIndex];
+            var name = data[..nextSpaceIndex];
             data = data.Slice(nextSpaceIndex + 2);
 
             return new IntermediaryMessageData(tag, name, data);
