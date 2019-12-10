@@ -11,7 +11,7 @@ namespace PoeLogThing
     public class LogWatcher
     {
 
-        public async IAsyncEnumerable<string> WatchAsync(
+        public async IAsyncEnumerable<ILogEntry> WatchAsync(
             string fileName,
             [EnumeratorCancellation] CancellationToken ct = default)
         {
@@ -42,12 +42,12 @@ namespace PoeLogThing
             }
         }
 
-        private List<string> ProcessBuffer(Memory<byte> buffer)
+        private static IEnumerable<ILogEntry> ProcessBuffer(Memory<byte> buffer)
         {
             var span = buffer.Span;
             ReadOnlySpan<char> text = Encoding.UTF8.GetString(span);
 
-            var list = new List<string>();
+            var list = new List<ILogEntry>();
             while (!text.IsEmpty)
             {
                 var lineBreak = text.IndexOf("\r\n");
@@ -55,7 +55,8 @@ namespace PoeLogThing
 
                 var line = text.Slice(0, lineBreak);
 
-                list.Add(line.ToString());
+                if (EntryParser.TryParse(line, out var entry))
+                    list.Add(entry);
 
                 text = text.Slice(lineBreak + 2);
             }
