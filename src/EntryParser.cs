@@ -1,8 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace PoeLogThing
 {
@@ -28,7 +25,7 @@ namespace PoeLogThing
 
             result = prefix switch
             {
-                var x when x == '#' || x == '%' || x == '$' || x == '&' 
+                var x when x == '#' || x == '%' || x == '$' || x == '&'
                     => ParseGlobalMessage(utf8Line, offset, prefix, timestamp),
                 '@' => ParseWhisper(utf8Line.Slice(offset), timestamp),
                 ':' => ParseColonPrefixed(utf8Line.Slice(offset + 1), timestamp),
@@ -54,11 +51,11 @@ namespace PoeLogThing
             in ReadOnlySpan<char> data, DateTime timestamp) =>
             data switch
             {
-                var x when x.StartsWith("From ") => 
+                var x when x.StartsWith("From ") =>
                 MessageDataToWhisper(GetMessageData(
                     data.Slice(5)), true, timestamp),
 
-                var x when x.StartsWith("To ") => 
+                var x when x.StartsWith("To ") =>
                 MessageDataToWhisper(GetMessageData(
                     data.Slice(3)), true, timestamp),
 
@@ -91,13 +88,13 @@ namespace PoeLogThing
             in ReadOnlySpan<char> data, DateTime timestamp) =>
             data switch
             {
-                var x when x.StartsWith("Async connecting to ") => 
+                var x when x.StartsWith("Async connecting to ") =>
                 new ConnectingToLoginServer(data[20..], timestamp),
-                var x when x.StartsWith("Connecting to instance server at ") => 
+                var x when x.StartsWith("Connecting to instance server at ") =>
                 new ConnectingToInstance(data[33..], timestamp),
-                var x when x.StartsWith("Connect time to instance server was ") => 
+                var x when x.StartsWith("Connect time to instance server was ") =>
                 new ConnectedToInstance(int.Parse(data[36..^2]), timestamp),
-                var x when x.StartsWith("Connected to ") => 
+                var x when x.StartsWith("Connected to ") =>
                 ParseConnectedTo(data, timestamp),
                 _ => null
             };
@@ -116,14 +113,14 @@ namespace PoeLogThing
         private static ILogEntry ParseColonPrefixed(
             in ReadOnlySpan<char> data, DateTime timestamp) =>
             data switch
-            { 
-                var x when x.StartsWith("You have entered ") => 
+            {
+                var x when x.StartsWith("You have entered ") =>
                 new YouEnteredArea(data[17..], timestamp) as ILogEntry,
-                var x when x.EndsWith(" has joined the area.") => 
+                var x when x.EndsWith(" has joined the area.") =>
                 new OtherJoinedArea(data[..^21], timestamp),
-                var x when x.EndsWith(" has left the area.") => 
+                var x when x.EndsWith(" has left the area.") =>
                 new OtherLeftArea(data[..^19], timestamp),
-                var x when x.EndsWith(" has been slain.") => 
+                var x when x.EndsWith(" has been slain.") =>
                 new SlainMessage(data[..^16], timestamp),
                 var x when x.StartsWith("AFK mode is now ON. Autoreply ") =>
                 new AfkModeOn(data[31..^1], timestamp),
