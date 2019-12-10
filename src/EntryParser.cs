@@ -11,7 +11,7 @@ namespace PoeLogThing
         public static bool TryParse(in ReadOnlySpan<char> utf8Line, out ILogEntry result)
         {
             // Find where the actual information starts
-            int offset = utf8Line.IndexOf(']');
+            var offset = utf8Line.IndexOf(']');
 
             if (utf8Line.Length < 19 ||
                 !DateTime.TryParse(utf8Line.Slice(0, 19), out var timestamp) ||
@@ -38,7 +38,8 @@ namespace PoeLogThing
             return result != null;
         }
 
-        private static PublicChatMessage ParseGlobalMessage(ReadOnlySpan<char> utf8Line, int offset, char prefix,
+        private static PublicChatMessage ParseGlobalMessage(
+            ReadOnlySpan<char> utf8Line, int offset, char prefix,
             DateTime timestamp)
         {
             var msgData = GetMessageData(utf8Line.Slice(offset));
@@ -49,27 +50,24 @@ namespace PoeLogThing
                 prefix, timestamp);
         }
 
-        private static ILogEntry ParseWhisper(in ReadOnlySpan<char> data, DateTime timestamp)
-        {
-            int idx = 0;
-
-            if (data.StartsWith("From "))
+        private static ILogEntry ParseWhisper(
+            in ReadOnlySpan<char> data, DateTime timestamp) =>
+            data switch
             {
-                var msg = GetMessageData(data.Slice(idx + 5));
+                var x when x.StartsWith("From ") => 
+                MessageDataToWhisper(GetMessageData(
+                    data.Slice(5)), true, timestamp),
 
-                return new WhisperMessage(
-                    msg.Name, msg.GuildTag, msg.Message, true, timestamp);
-            }
-            else if (data.StartsWith("To "))
-            {
-                var msg = GetMessageData(data.Slice(idx + 3));
+                var x when x.StartsWith("To ") => 
+                MessageDataToWhisper(GetMessageData(
+                    data.Slice(3)), true, timestamp),
 
-                return new WhisperMessage(
-                    msg.Name, msg.GuildTag, msg.Message, false, timestamp);
-            }
+                _ => null
+            };
 
-            return null;
-        }
+        private static WhisperMessage MessageDataToWhisper(
+            IntermediaryMessageData msg, bool incoming, DateTime timestamp) =>
+            new WhisperMessage(msg.Name, msg.GuildTag, msg.Message, incoming, timestamp);
 
         private static IntermediaryMessageData GetMessageData(ReadOnlySpan<char> data)
         {
@@ -90,75 +88,76 @@ namespace PoeLogThing
             return new IntermediaryMessageData(tag, name, data);
         }
 
-        private static ILogEntry ParseStatus(in ReadOnlySpan<char> data, DateTime timestamp)
-        {
-            if (data.StartsWith("Async connecting to "))
-                return new ConnectingToLoginServer(data[20..], timestamp);
-
-            if (data.StartsWith("Connecting to instance server at "))
-                return new ConnectingToInstance(data[33..], timestamp);
-
-            if (data.StartsWith("Connect time to instance server was "))
-                return new ConnectedToInstance(int.Parse(data[36..^2]), timestamp);
-
-            if (data.StartsWith("Connected to "))
+        private static ILogEntry ParseStatus(
+            in ReadOnlySpan<char> data, DateTime timestamp) =>
+            data switch
             {
-                var addressEndIdx = data.Slice(14).IndexOf(' ') + 14;
-                var address = data[13..addressEndIdx];
-                var msBeginIdx = data.LastIndexOf(' ') + 1;
-                var msSpan = data[msBeginIdx..^3];
-                var ms = int.Parse(msSpan);
-                return new ConnectedToLoginServer(address, ms, timestamp);
-            }
+                var x when x.StartsWith("Async connecting to ") => 
+                new ConnectingToLoginServer(data[20..], timestamp),
+                var x when x.StartsWith("Connecting to instance server at ") => 
+                new ConnectingToInstance(data[33..], timestamp),
+                var x when x.StartsWith("Connect time to instance server was ") => 
+                new ConnectedToInstance(int.Parse(data[36..^2]), timestamp),
+                var x when x.StartsWith("Connected to ") => 
+                ParseConnectedTo(data, timestamp),
+                _ => null
+            };
 
-            return null;
+        private static ILogEntry ParseConnectedTo(
+            ReadOnlySpan<char> data, DateTime timestamp)
+        {
+            var addressEndIdx = data.Slice(14).IndexOf(' ') + 14;
+            var address = data[13..addressEndIdx];
+            var msBeginIdx = data.LastIndexOf(' ') + 1;
+            var msSpan = data[msBeginIdx..^3];
+            var ms = int.Parse(msSpan);
+            return new ConnectedToLoginServer(address, ms, timestamp);
         }
 
-        private static ILogEntry ParseColonPrefixed(in ReadOnlySpan<char> data, DateTime timestamp)
+        private static ILogEntry ParseColonPrefixed(
+            in ReadOnlySpan<char> data, DateTime timestamp) =>
+            data switch
+            { 
+                var x when x.StartsWith("You have entered ") => 
+                new YouEnteredArea(data[17..], timestamp) as ILogEntry,
+                var x when x.EndsWith(" has joined the area.") => 
+                new OtherJoinedArea(data[..^21], timestamp),
+                var x when x.EndsWith(" has left the area.") => 
+                new OtherLeftArea(data[..^19], timestamp),
+                var x when x.EndsWith(" has been slain.") => 
+                new SlainMessage(data[..^16], timestamp),
+                var x when x.StartsWith("AFK mode is now ON. Autoreply ") =>
+                new AfkModeOn(data[31..^1], timestamp),
+                var x when x.StartsWith("AFK mode is now OFF") =>
+                new AfkModeOff(timestamp),
+                var x when x.StartsWith("DND mode is now ON. Autoreply ") =>
+                new DndModeOn(data[31..^1], timestamp),
+                var x when x.StartsWith("DND mode is now OFF") =>
+                new DndModeOff(timestamp),
+                var x when x.Contains(" is now level ", StringComparison.Ordinal) =>
+                ParseIsNowLevel(data, timestamp),
+                _ => null
+            };
+
+        private static ILogEntry ParseIsNowLevel(
+            ReadOnlySpan<char> data, DateTime timestamp)
         {
-            if (data.StartsWith("You have entered "))
-                return new YouEnteredArea(data[17..], timestamp);
+            var parIdx = data.IndexOf('(');
+            if (parIdx == -1) return null;
 
-            if (data.EndsWith(" has joined the area."))
-                return new OtherJoinedArea(data[0..^21], timestamp);
-
-            if (data.EndsWith(" has left the area."))
-                return new OtherLeftArea(data[0..^19], timestamp);
-
-            if (data.EndsWith(" has been slain."))
-                return new SlainMessage(data[0..^16], timestamp);
-
-            if (data.StartsWith("AFK mode is now ON. Autoreply "))
-                return new AfkModeOn(data[31..^1], timestamp);
-
-            if (data.StartsWith("AFK mode is now OFF"))
-                return new AfkModeOff(timestamp);
-
-            if (data.StartsWith("DND mode is now ON. Autoreply "))
-                return new DndModeOn(data[31..^1], timestamp);
-
-            if (data.StartsWith("DND mode is now OFF"))
-                return new DndModeOff(timestamp);
-
-            if (data.Contains(" is now level ", StringComparison.Ordinal))
-            {
-                var parIdx = data.IndexOf('(');
-                if (parIdx != -1)
-                {
-                    var charName = data[0..--parIdx];
-                    var lastSpaceIdx = data.LastIndexOf(' ') + 1;
-                    int level = int.Parse(data[lastSpaceIdx..]);
-                    return new IsNowLevel(charName, level, timestamp);
-                }
-            }
-
-            return null;
+            var charName = data[0..--parIdx];
+            var lastSpaceIdx = data.LastIndexOf(' ') + 1;
+            var level = int.Parse(data[lastSpaceIdx..]);
+            return new IsNowLevel(charName, level, timestamp);
         }
 
 
         private readonly ref struct IntermediaryMessageData
         {
-            public IntermediaryMessageData(ReadOnlySpan<char> tag, ReadOnlySpan<char> name, ReadOnlySpan<char> message)
+            public IntermediaryMessageData(
+                ReadOnlySpan<char> tag,
+                ReadOnlySpan<char> name,
+                ReadOnlySpan<char> message)
             {
                 GuildTag = tag;
                 Name = name;
